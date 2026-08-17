@@ -1,0 +1,15 @@
+# Copy to ~/.dbt/profiles.yml (or set DBT_PROFILES_DIR) and fill in your values.
+# Read-only reminder: point this at a service account / role with
+# roles/bigquery.dataViewer (dataset-scoped to `voy`) + roles/bigquery.jobUser.
+voy_retention:
+  target: dev
+  outputs:
+    dev:
+      type: bigquery
+      method: oauth            # or service-account (keyfile) in CI
+      project: zains-gcp       # billing / execution project
+      dataset: voy_analytics   # where dbt writes models (NOT the raw `voy` dataset)
+      location: US
+      threads: 4
+      priority: interactive
+      # keyfile: /path/to/service-account.json   # if method: service-account

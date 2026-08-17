@@ -1,0 +1,70 @@
+version: 2
+
+models:
+  - name: dim_customer
+    description: Conformed customer dimension (all registered customers).
+    columns:
+      - name: customer_id
+        description: Primary key.
+        tests: [not_null, unique]
+      - name: country
+        tests: [not_null]
+      - name: acq_taxonomy
+        description: Acquisition group; 'Unknown' where unattributed.
+        tests: [not_null]
+      - name: cohort_month
+        description: Month of first activation (null if never active).
+      - name: is_ever_active
+        description: True if the customer ever had a subscription spell.
+        tests: [not_null]
+
+  - name: fct_customer_month
+    description: >
+      Analysis-ready fact. One row per ever-active customer per calendar month
+      from cohort month to snapshot. is_active / is_active_survival drive all
+      retention and churn metrics. subscription count is informational only.
+    columns:
+      - name: customer_id
+        tests: [not_null]
+      - name: month
+        tests: [not_null]
+      - name: months_since_acquisition
+        description: Tenure index (0 = acquisition month).
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+      - name: is_active
+        tests: [not_null]
+      - name: is_active_survival
+        tests: [not_null]
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [customer_id, month]
+
+  - name: rpt_cohort_retention
+    description: Cohort × tenure retention (survival + activity), drillable by dimension.
+    columns:
+      - name: survival_retention
+        description: retained_survival / cohort_size.
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 1
+      - name: activity_retention
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 1
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [cohort_month, country, acq_taxonomy, tenure]
+
+  - name: rpt_active_users_daily
+    description: Daily active users by dimension (dau, 32-day window, live+window).
+    columns:
+      - name: day
+        tests: [not_null]
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [day, country, acq_taxonomy]

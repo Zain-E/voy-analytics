@@ -1,0 +1,23 @@
+# dbt
+target/
+dbt_packages/
+logs/
+.user.yml
+
+# python / streamlit
+.venv/
+__pycache__/
+*.pyc
+.streamlit/secrets.toml
+
+# creds — never commit
+*.json
+!package*.json
+.env
+*.local
+
+# os
+.DS_Store
+
+# transfer leftovers
+_to_delete/

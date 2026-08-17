@@ -1,0 +1,30 @@
+version: 2
+
+models:
+  - name: stg_voy__customers
+    description: One row per registered customer, typed and renamed.
+    columns:
+      - name: customer_id
+        tests: [not_null, unique]
+      - name: country
+        tests: [not_null]
+
+  - name: stg_voy__acq_orders
+    description: One row per customer — acquisition taxonomy, nulls bucketed as 'Unknown'.
+    columns:
+      - name: customer_id
+        tests: [not_null, unique]
+      - name: acq_taxonomy
+        tests: [not_null]
+
+  - name: stg_voy__activity
+    description: Cleaned subscription active-interval spells (valid intervals only).
+    columns:
+      - name: customer_id
+        tests: [not_null]
+      - name: subscription_id
+        tests: [not_null]
+      - name: from_date
+        tests: [not_null]
+      - name: to_date
+        tests: [not_null]

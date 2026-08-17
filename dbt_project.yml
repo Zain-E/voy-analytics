@@ -1,0 +1,45 @@
+name: 'voy_retention'
+version: '1.0.0'
+config-version: 2
+
+profile: 'voy_retention'
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+# ------------------------------------------------------------------------------
+# Project variables — the knobs a stakeholder / analyst is most likely to change.
+# All metric logic reads these, so definitions stay in one place.
+# ------------------------------------------------------------------------------
+vars:
+  # As-of date for the data. Max date present in voy.activity.
+  snapshot_date: '2024-08-16'
+
+  # "Active user" lookback window (days). 32 = ~1 calendar month, catches activity
+  # straddling a month boundary. Set to 60 for a true two-month lookback.
+  active_window_days: 32
+
+  # Gap (days) tolerated when merging a customer's subscription spells into one
+  # continuous active period. 0 = spells must overlap or touch to merge.
+  island_gap_tolerance_days: 0
+
+  # Daily active-user reporting is bounded to this start date to keep the daily
+  # grain cheap. Cohort retention (monthly) always uses full history regardless.
+  daily_report_start_date: '2023-01-01'
+
+models:
+  voy_retention:
+    staging:
+      +materialized: view
+    intermediate:
+      +materialized: view
+    marts:
+      +materialized: table

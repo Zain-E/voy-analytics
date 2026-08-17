@@ -1,0 +1,48 @@
+version: 2
+
+sources:
+  - name: voy
+    database: zains-gcp
+    schema: voy
+    description: >
+      Raw Voy subscription data. Customer-keyed. Three tables: a customer
+      dimension, an acquisition-taxonomy attribution table, and subscription
+      active-interval spells.
+    tables:
+      - name: customers
+        description: One row per registered customer.
+        columns:
+          - name: customer_id
+            description: Primary key. Unique per customer.
+            tests: [not_null, unique]
+          - name: customer_country
+            description: Customer country (Brazil or United Kingdom in current data).
+            tests: [not_null]
+
+      - name: acq_orders
+        description: One row per customer — acquisition business-category attribution.
+        columns:
+          - name: customer_id
+            description: Foreign key to customers.
+            tests: [not_null, unique]
+          - name: taxonomy_business_category_group
+            description: Acquisition category group (e.g. Hair Loss, ED, Weight Loss).
+
+      - name: activity
+        description: >
+          Subscription active-interval "spells". One row per (subscription, spell):
+          the subscription was active from from_date to to_date inclusive. A
+          subscription can appear in many rows; a customer holds many subscriptions.
+        columns:
+          - name: customer_id
+            description: Foreign key to customers.
+            tests: [not_null]
+          - name: subscription_id
+            description: Subscription identifier (repeats across spells).
+            tests: [not_null]
+          - name: from_date
+            description: Spell start date (inclusive).
+            tests: [not_null]
+          - name: to_date
+            description: Spell end date (inclusive).
+            tests: [not_null]
