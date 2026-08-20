@@ -40,9 +40,40 @@ pip install -r requirements.txt
 # auth as a read-only principal
 gcloud auth application-default login
 
+mkdir -p .streamlit
 cp secrets.example.toml .streamlit/secrets.toml   # then edit project/dataset
 streamlit run app.py
 ```
+
+## Deploy (Streamlit Community Cloud)
+
+| Setting | Value |
+|---|---|
+| Repository | `Zain-E/voy-analytics` |
+| Branch | `main` |
+| Main file path | `streamlit/app.py` |
+| Python version | 3.14 (Cloud's default) or 3.13 to match local dev — both resolve |
+
+Community Cloud looks for a dependency file next to the entrypoint before the repository
+root, so it installs `streamlit/requirements.txt` and **not** the dbt pip-freeze in the
+root `requirements.txt`. Streamlit also puts the entrypoint's directory on `sys.path`,
+which is what makes `import data` work from a subdirectory app.
+
+Paste `secrets.example.toml` into **Settings → Secrets**, this time *including* the
+`[gcp_service_account]` block — the container has no gcloud, so Application Default
+Credentials are unavailable and the key is the only way in. `data.py` uses the key when
+that block is present and falls back to ADC when it isn't, so the same file works in both
+places.
+
+The Data model tab reads `models/**` and `dbt_project.yml` from the checkout, so it needs
+nothing extra. `target/catalog.json` is gitignored and therefore absent on Cloud: the tab
+falls back to inferred column types, which is the documented degraded path.
+
+One caveat worth deciding on deliberately: the deployed app holds a live BigQuery client,
+so anyone who can open the URL can run its queries against the project, billed to you. The
+parquet cache makes repeat queries free and the marts are small, but apps from a public
+repo are public by default — restrict viewers under **Share** if that is not what you
+want (the free tier allows one private app).
 
 ## Prerequisite
 
