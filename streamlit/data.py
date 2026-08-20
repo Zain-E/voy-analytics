@@ -91,10 +91,32 @@ def _service_account_credentials():
 _CREDENTIALS = _service_account_credentials()
 
 
+def _visible_secret_keys() -> list[str]:
+    """Top-level secret NAMES only — never values. Used to explain a missing key."""
+    try:
+        return sorted(st.secrets.keys())
+    except Exception:
+        return []
+
+
 @functools.lru_cache(maxsize=1)
 def _bq_client() -> bigquery.Client:
     """Plain (non-Streamlit) singleton so it's safe to use from worker threads."""
-    return bigquery.Client(project=PROJECT, credentials=_CREDENTIALS)
+    try:
+        return bigquery.Client(project=PROJECT, credentials=_CREDENTIALS)
+    except Exception as exc:
+        if _CREDENTIALS is not None:
+            raise
+        # credentials=None means google-auth walked its chain to the GCE metadata
+        # server and timed out there — a TransportError that never mentions the
+        # actual cause. Off GCE that only ever means "nobody configured a key".
+        raise RuntimeError(
+            "No BigQuery credentials. Add a [gcp_service_account] section to this "
+            "app's secrets (Manage app -> Settings -> Secrets), pasted WITHOUT the "
+            "leading '# ' comment markers — see streamlit/secrets.example.toml. "
+            f"Secrets the app can currently see: {_visible_secret_keys() or 'none'}. "
+            "Locally, `gcloud auth application-default login` works instead."
+        ) from exc
 
 
 def _cache_path(sql: str) -> Path:
