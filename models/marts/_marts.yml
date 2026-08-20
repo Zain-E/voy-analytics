@@ -2,33 +2,89 @@ version: 2
 
 models:
   - name: dim_customer
-    description: Conformed customer dimension (all registered customers).
+    description: >
+      Conformed customer dimension — one row per REGISTERED customer (includes
+      never-active customers for conversion tracking). Carries acquisition
+      attribution and first/last-activity summary derived from the merged
+      continuous subscription periods.
     columns:
       - name: customer_id
-        description: Primary key.
+        description: Primary key — unique per registered customer.
         tests: [not_null, unique]
       - name: country
+        description: Customer's country (Brazil or United Kingdom in current data).
         tests: [not_null]
       - name: acq_taxonomy
-        description: Acquisition group; 'Unknown' where unattributed.
+        description: Acquisition group (e.g. Hair Loss, ED, Weight Loss); 'Unknown' where unattributed.
         tests: [not_null]
+      - name: first_activation_date
+        description: Date of the customer's first-ever subscription spell (null if never active).
       - name: cohort_month
-        description: Month of first activation (null if never active).
+        description: Month of first activation — the customer's acquisition cohort (null if never active).
+      - name: last_active_date
+        description: Last day covered by any of the customer's subscription periods (null if never active).
+      - name: first_period_end
+        description: >
+          Last day of the customer's FIRST continuous subscription period — i.e. their
+          first churn point. Drives never-churned (survival) retention (null if never active).
       - name: is_ever_active
-        description: True if the customer ever had a subscription spell.
+        description: True if the customer ever held a subscription spell.
         tests: [not_null]
+
+  - name: dim_subscription
+    description: >
+      Conformed subscription dimension — one row per subscription. The
+      subscription-grain companion to dim_customer: a subscription belongs to one
+      customer and may appear as several spells in the raw activity table, collapsed
+      here to a single summarised row. Downstream subscription-grain models join this
+      on subscription_id to resolve the owning customer's country / acquisition group.
+      (Spell-level interval maths still read stg_voy__activity directly.)
+    columns:
+      - name: subscription_id
+        description: Primary key — unique per subscription.
+        tests: [not_null, unique]
+      - name: customer_id
+        description: Owning customer (foreign key to dim_customer).
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_customer')
+              field: customer_id
+      - name: country
+        description: Owning customer's country, denormalised from dim_customer for drill-down.
+        tests: [not_null]
+      - name: acq_taxonomy
+        description: Owning customer's acquisition group, denormalised from dim_customer for drill-down.
+        tests: [not_null]
+      - name: subscription_start_date
+        description: Earliest spell start date across the subscription's spells (inclusive).
+        tests: [not_null]
+      - name: subscription_end_date
+        description: Latest spell end date across the subscription's spells (inclusive).
+        tests: [not_null]
+      - name: lifespan_days
+        description: Calendar span from first start to last end, inclusive (end − start + 1 days).
+      - name: spell_count
+        description: Number of raw activity spells (intervals) that make up the subscription.
+      - name: is_first_subscription
+        description: True for the customer's earliest-starting subscription (subscription_id breaks ties).
+      - name: is_live_at_snapshot
+        description: True if the subscription's last spell reaches the snapshot date (still live at extract).
 
   - name: fct_customer_per_month_snapshot
     description: >
-      Analysis-ready fact. One row per ever-active customer per calendar month
+      Analysis-ready fact. One row per ever-subscribed customer per calendar month
       from cohort month to snapshot. has_active_subscription / has_continuous_active_subscription drive all
       retention and churn metrics. subscription count is informational only.
     columns:
       - name: customer_id
+        description: Customer key (ever-subscribed customers only).
         tests: [not_null]
       - name: calendar_month
         description: Calendar month the row describes (ranges cohort_month → snapshot month).
         tests: [not_null]
+      - name: cohort_month
+        description: Month the customer first activated (their acquisition cohort). Constant across the customer's rows.
       - name: months_since_acquisition
         description: Tenure index (0 = acquisition month).
         tests:
@@ -43,6 +99,10 @@ models:
         tests: [not_null]
       - name: active_subscription_count
         description: Distinct live subscriptions that month. Informational — does not affect active status.
+      - name: country
+        description: Customer's country, denormalised from dim_customer for drill-down.
+      - name: acq_taxonomy
+        description: Customer's acquisition group, denormalised from dim_customer for drill-down.
       - name: is_new_customer
         description: First active month for the customer (acquisition).
       - name: has_reactivated_subscription_this_month
@@ -55,10 +115,19 @@ models:
 
   - name: viz_cohort_retention
     description: >
-      Cohort × tenure retention, drillable by dimension. Two measures:
+      Cohort × tenure retention, drillable by dimension. One row per
+      cohort_month × country × acq_taxonomy × tenure. Two measures:
       never_churned_retention (customers who have never churned since acquisition)
       and total_retention (customers active now, win-backs included).
     columns:
+      - name: cohort_month
+        description: Acquisition cohort — the month this cohort's customers first activated.
+      - name: country
+        description: Country dimension for drill-down.
+      - name: acq_taxonomy
+        description: Acquisition group dimension for drill-down.
+      - name: tenure
+        description: Months since acquisition (0 = acquisition month) — the retention curve's x-axis.
       - name: cohort_size
         description: Customers acquired in the cohort — the denominator for both rates.
       - name: retained_never_churned
@@ -94,12 +163,18 @@ models:
 
   - name: viz_active_users_daily
     description: >
-      Daily active-user reporting by dimension. daily_active_customers (live on the day)
-      and active_customers_32d (trailing 32 days) are customer-grain; live_subscriptions
-      is subscription-grain (informational — does not define "active").
+      Daily active-user reporting by dimension. One row per day × country × acq_taxonomy.
+      daily_active_customers (live on the day) and active_customers_32d (trailing 32 days)
+      are customer-grain; live_subscriptions is subscription-grain (informational — does
+      not define "active").
     columns:
       - name: day
+        description: Calendar day the row describes.
         tests: [not_null]
+      - name: country
+        description: Country dimension for drill-down.
+      - name: acq_taxonomy
+        description: Acquisition group dimension for drill-down.
       - name: daily_active_customers
         description: Distinct customers with a live subscription covering the day.
       - name: active_customers_32d

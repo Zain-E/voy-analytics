@@ -23,16 +23,17 @@ with periods as (
     join {{ ref('dim_customer') }} d using (customer_id)
 ),
 
--- Raw subscription spells (still carry subscription_id) for the subscription-grain count.
+-- Raw subscription spells for the subscription-grain count, joined to
+-- dim_subscription so the dimensions are resolved through the subscription entity.
 activity as (
     select
         a.subscription_id,
         a.from_date,
         a.to_date,
-        d.country,
-        d.acq_taxonomy
+        s.country,
+        s.acq_taxonomy
     from {{ ref('stg_voy__activity') }} a
-    join {{ ref('dim_customer') }} d using (customer_id)
+    join {{ ref('dim_subscription') }} s using (subscription_id)
 ),
 
 spine as (

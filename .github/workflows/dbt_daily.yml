@@ -1,14 +1,20 @@
 name: dbt daily build
 
-# Runs the models + tests once a day, and on demand, using the `ci` target in
-# dbt_profiles/profiles.yml.
+# Runs the models + tests once a day, and on demand, using the `prod` target in
+# dbt_profiles/profiles.yml (service-account-json, built from the env vars below).
 #
-# Required repo secrets (Settings → Secrets and variables → Actions):
-#   GCP_SA_KEY   – JSON key for a service account with, on BigQuery:
-#                    • roles/bigquery.dataViewer  on the `voy` source dataset
-#                    • roles/bigquery.dataEditor  on the CI target dataset (voy_analytics_ci)
-#                    • roles/bigquery.jobUser     on the project
-#   GCP_PROJECT  – billing/execution project id (e.g. zains-gcp)
+# Required repo secrets (Settings → Secrets and variables → Actions) — these are
+# the fields of a service-account JSON key, supplied individually:
+#   PROJECT_ID       – billing/execution project id (e.g. zains-gcp)
+#   PRIVATE_KEY_ID   – key id
+#   PRIVATE_KEY      – the full private key, including the BEGIN/END lines
+#   CLIENT_EMAIL     – service account email
+#   CLIENT_ID        – service account client id
+#
+# The service account needs, on BigQuery:
+#   • roles/bigquery.dataViewer  on the `voy` source dataset
+#   • roles/bigquery.dataEditor  on the target dataset (voy_analytics)
+#   • roles/bigquery.jobUser     on the project
 
 on:
   schedule:
@@ -20,8 +26,11 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DBT_PROFILES_DIR: ${{ github.workspace }}/dbt_profiles
-      GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
-      BIGQUERY_KEYFILE: ${{ runner.temp }}/gcp-keyfile.json
+      PROJECT_ID: ${{ secrets.PROJECT_ID }}
+      PRIVATE_KEY_ID: ${{ secrets.PRIVATE_KEY_ID }}
+      PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+      CLIENT_EMAIL: ${{ secrets.CLIENT_EMAIL }}
+      CLIENT_ID: ${{ secrets.CLIENT_ID }}
     steps:
       - uses: actions/checkout@v4
 
@@ -32,13 +41,8 @@ jobs:
       - name: Install dbt
         run: pip install "dbt-bigquery>=1.7,<2.0"
 
-      - name: Write BigQuery credentials
-        run: printf '%s' "$GCP_SA_KEY" > "$BIGQUERY_KEYFILE"
-        env:
-          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
-
       - name: dbt deps
-        run: dbt deps --target ci
+        run: dbt deps
 
       - name: dbt build
-        run: dbt build --target ci
+        run: dbt build --target prod

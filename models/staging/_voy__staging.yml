@@ -2,29 +2,43 @@ version: 2
 
 models:
   - name: stg_voy__customers
-    description: One row per registered customer, typed and renamed.
+    description: One row per registered customer, typed and renamed from the raw source.
     columns:
       - name: customer_id
+        description: Primary key — unique identifier for a registered customer.
         tests: [not_null, unique]
       - name: country
+        description: Customer's country (Brazil or United Kingdom in current data). Renamed from customer_country.
         tests: [not_null]
 
   - name: stg_voy__acq_orders
-    description: One row per customer — acquisition taxonomy, nulls bucketed as 'Unknown'.
+    description: >
+      One row per customer — acquisition taxonomy, deduped to a single row per
+      customer with missing taxonomy bucketed as 'Unknown'.
     columns:
       - name: customer_id
+        description: Foreign key to the customer (one row per customer after dedupe).
         tests: [not_null, unique]
       - name: acq_taxonomy
+        description: >
+          Acquisition business-category group (e.g. Hair Loss, ED, Weight Loss);
+          'Unknown' where the source had no attribution.
         tests: [not_null]
 
   - name: stg_voy__activity
-    description: Cleaned subscription active-interval spells (valid intervals only).
+    description: >
+      Cleaned subscription active-interval spells — one row per (subscription, spell),
+      keeping valid intervals only (non-null dates, to_date >= from_date).
     columns:
       - name: customer_id
+        description: Foreign key to the customer that holds the subscription.
         tests: [not_null]
       - name: subscription_id
+        description: Subscription identifier; repeats across a subscription's spells and across customers.
         tests: [not_null]
       - name: from_date
+        description: Spell start date (inclusive) — the subscription was live from this day.
         tests: [not_null]
       - name: to_date
+        description: Spell end date (inclusive) — the subscription was live through this day.
         tests: [not_null]

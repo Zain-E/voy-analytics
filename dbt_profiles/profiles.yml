@@ -9,24 +9,34 @@ voy_retention:
   target: dev
   outputs:
 
-    # ---- Local development: authenticate as yourself ----
+    # ---- Local development ----
     #   gcloud auth application-default login
     dev:
       type: bigquery
       method: oauth
-      project: "{{ env_var('GCP_PROJECT', 'zains-gcp') }}"
+      project: "{{ env_var('PROJECT_ID', 'zains-gcp') }}"
       dataset: voy_analytics        # dbt WRITES here — separate from raw `voy`
       location: US
       threads: 4
       priority: interactive
 
-    # ---- CI: service account (keyfile path supplied via env var) ----
-    ci:
+    # ---- Production: service account ----
+    prod:
       type: bigquery
-      method: service-account
-      project: "{{ env_var('GCP_PROJECT', 'zains-gcp') }}"
-      dataset: voy_analytics_ci
+      method: service-account-json
+      project: "{{ env_var('PROJECT_ID', 'zains-gcp') }}"
+      dataset: voy_analytics        # prod marts (read/write for dbt)
       location: US
       threads: 4
       priority: interactive
-      keyfile: "{{ env_var('BIGQUERY_KEYFILE', '') }}"
+      keyfile_json:
+        type: service_account
+        project_id: "{{ env_var('PROJECT_ID') }}"
+        private_key_id: "{{ env_var('PRIVATE_KEY_ID') }}"
+        private_key: "{{ env_var('PRIVATE_KEY') }}"
+        client_email: "{{ env_var('CLIENT_EMAIL') }}"
+        client_id: "{{ env_var('CLIENT_ID') }}"
+        auth_uri: "{{ env_var('AUTH_URI', 'https://accounts.google.com/o/oauth2/auth') }}"
+        token_uri: "{{ env_var('TOKEN_URI', 'https://oauth2.googleapis.com/token') }}"
+        auth_provider_x509_cert_url: "{{ env_var('AUTH_PROVIDER_X509_CERT_URL', 'https://www.googleapis.com/oauth2/v1/certs') }}"
+        client_x509_cert_url: "{{ env_var('CLIENT_X509_CERT_URL', '') }}"

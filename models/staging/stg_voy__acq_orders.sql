@@ -3,7 +3,6 @@ with source as (
 ),
 
 -- Defensive dedupe to one row per customer, and bucket missing taxonomy as 'Unknown'
--- so acquisition attribution never silently drops customers.
 ranked as (
     select
         customer_id,

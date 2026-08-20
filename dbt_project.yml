@@ -37,6 +37,11 @@ vars:
 
 models:
   voy_retention:
+    # Push model + column descriptions from the schema YAML into BigQuery's native
+    # table/column metadata (not just dbt's docs site). Applies to every layer.
+    +persist_docs:
+      relation: true
+      columns: true
     staging:
       +materialized: view
     intermediate:
