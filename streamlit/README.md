@@ -52,7 +52,7 @@ streamlit run app.py
 | Repository | `Zain-E/voy-analytics` |
 | Branch | `main` |
 | Main file path | `streamlit/app.py` |
-| Python version | 3.13, to match local dev |
+| Python version | 3.14 (Cloud's default) or 3.13 to match local dev — both resolve |
 
 Community Cloud looks for a dependency file next to the entrypoint before the repository
 root, so it installs `streamlit/requirements.txt` and **not** the dbt pip-freeze in the
