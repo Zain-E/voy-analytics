@@ -7,6 +7,15 @@ The project rests on one decision: a customer counts as active whether they hold
 subscription or five. Each customer's subscription spells are merged into continuous
 periods, and retention, churn and active users are all measured from those periods.
 
+## Live dashboard
+
+**[Open the dashboard on Streamlit Community Cloud →](https://voy-analytics-zain-test.streamlit.app/)**
+
+Click that link to see the finished work without installing anything. It has three
+tabs: **Overview** and **Retention** for the metrics, and **Data model** for the dbt
+architecture DAG, ERD and table summaries. The setup steps further down are only
+needed if you want to run it locally.
+
 ## Architecture
 
 dbt generates the model docs and lineage, but also exists in the 'data model' tab.
