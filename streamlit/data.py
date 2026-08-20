@@ -2,8 +2,9 @@
 Data-access layer for the Voy retention dashboard.
 
 All reads target the dbt MARTS (not the raw tables) — the dashboard is a pure
-presentation layer over governed models. Configure the project / dataset in
-`.streamlit/secrets.toml` (see secrets.example.toml).
+presentation layer over governed models. Configure the project / dataset — and,
+when deploying, the service-account key — in `.streamlit/secrets.toml`
+(see secrets.example.toml).
 
 Performance model
 -----------------
@@ -38,6 +39,7 @@ import pandas as pd
 import polars as pl
 import streamlit as st
 from google.cloud import bigquery
+from google.oauth2 import service_account
 
 
 def _cfg(key: str, default: str) -> str:
@@ -66,10 +68,33 @@ _CACHE_DIR = Path(os.environ.get("VOY_CACHE_DIR", ".voy_cache")) / SNAPSHOT_DATE
 _CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 
+def _service_account_credentials():
+    """Credentials from a [gcp_service_account] secrets block, or None.
+
+    Local dev uses Application Default Credentials (`gcloud auth application-default
+    login`), but a hosted runtime like Streamlit Community Cloud has no gcloud and no
+    metadata server, so there the key is supplied as a secret instead. None means
+    "fall back to ADC", which is what bigquery.Client does with credentials=None.
+    """
+    try:
+        info = st.secrets.get("gcp_service_account")
+    except Exception:                       # no secrets file at all — local ADC
+        return None
+    if not info:
+        return None
+    return service_account.Credentials.from_service_account_info(
+        dict(info), scopes=["https://www.googleapis.com/auth/cloud-platform"])
+
+
+# Resolved once at import, on the main thread, so the worker threads in prefetch()
+# never reach into st.secrets themselves.
+_CREDENTIALS = _service_account_credentials()
+
+
 @functools.lru_cache(maxsize=1)
 def _bq_client() -> bigquery.Client:
     """Plain (non-Streamlit) singleton so it's safe to use from worker threads."""
-    return bigquery.Client(project=PROJECT)
+    return bigquery.Client(project=PROJECT, credentials=_CREDENTIALS)
 
 
 def _cache_path(sql: str) -> Path:
