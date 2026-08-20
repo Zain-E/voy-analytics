@@ -21,9 +21,20 @@ interactive docs (every model, its grain, columns, tests, and the full DAG) with
 In the browser, click the green **View Lineage Graph** button (bottom-right) for the
 DAG; click any node for its documentation.
 
+The dashboard carries the same picture without leaving Streamlit: the **Data model**
+tab has a zoomable architecture DAG and an ERD of the star schema (`dim_customer` in the
+middle), both generated from `models/**` — lineage from the `ref()` / `source()` calls,
+grains, columns and keys from the schema YAML — so they can't drift either. The ERD draws
+itself on every render; the DAG is pre-rendered (`python streamlit/data_model.py` after a
+model change, and the tab flags itself if it goes stale).
+See [`streamlit/data_model.py`](streamlit/data_model.py).
+
 Two orientation points for reading it: `int_customer_continuous_subscriptions` is the
 core gaps-and-islands merge, and `fct_customer_per_month_snapshot` is the table to
-analyse — tall, drillable, not pre-aggregated. The `viz_*` models are thin reporting
+analyse — tall, drillable, not pre-aggregated. `int_subscription_active_periods` is the
+same merge at subscription grain: it makes the gaps between a subscription's spells
+explicit (`dim_subscription.active_days` / `gap_days`) and gives the daily model a
+gap-aware source, since a subscription's start→end span silently covers those lapses. The `viz_*` models are thin reporting
 layers feeding the dashboard. Canonical definitions, join keys and caveats for the
 marts live in [`models/marts/context.md`](models/marts/context.md).
 

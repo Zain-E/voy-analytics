@@ -23,16 +23,19 @@ with periods as (
     join {{ ref('dim_customer') }} d using (customer_id)
 ),
 
--- Raw subscription spells for the subscription-grain count, joined to
+-- Subscription ACTIVE PERIODS for the subscription-grain count, joined to
 -- dim_subscription so the dimensions are resolved through the subscription entity.
-activity as (
+-- Periods, not dim_subscription's start->end span: the span covers the gaps
+-- between a subscription's spells, so it would report subscriptions as live on
+-- days they had lapsed.
+active_periods as (
     select
-        a.subscription_id,
-        a.from_date,
-        a.to_date,
+        p.subscription_id,
+        p.active_period_start as from_date,
+        p.active_period_end   as to_date,
         s.country,
         s.acq_taxonomy
-    from {{ ref('stg_voy__activity') }} a
+    from {{ ref('int_subscription_active_periods') }} p
     join {{ ref('dim_subscription') }} s using (subscription_id)
 ),
 
@@ -81,7 +84,7 @@ subs as (
         act.acq_taxonomy,
         count(distinct act.subscription_id) as live_subscriptions
     from spine s
-    join activity act
+    join active_periods act
         on act.from_date <= s.day
        and act.to_date   >= s.day
     group by s.day, act.country, act.acq_taxonomy

@@ -50,9 +50,20 @@ the raw activity table; this collapses them to one summarised row
 `spell_count`, `is_first_subscription`, `is_live_at_snapshot`). It also carries
 `country` / `acq_taxonomy` denormalised from the owning customer. Use it to
 count or describe subscriptions and to resolve a spell's dimensions by joining on
-`subscription_id`. **Do not use it for month/day active-user maths** — those need
-the spell intervals in `stg_voy__activity`, because a subscription's min→max span
-can hide internal gaps.
+`subscription_id`.
+
+It is built from `int_subscription_active_periods`, so it also quantifies the
+**gaps between spells**: `active_days` (days actually live), `gap_days`
+(`lifespan_days − active_days`, i.e. days lapsed inside the span),
+`longest_gap_days` and `active_period_count`. Mind the difference —
+`lifespan_days` is the SPAN from first start to last end and counts lapsed days;
+`active_days` is coverage. 211,712 of 1,482,002 subscriptions (14%) lapse at
+least once, by 37 days on average.
+
+**Do not use its start→end span for month/day active-user maths** — that span
+covers the gaps, so it reports subscriptions as live on days they had lapsed.
+Use `int_subscription_active_periods` (one row per continuous run) for any
+"live on day D" test; that is what `viz_active_users_daily` reads.
 
 ### `fct_customer_per_month_snapshot` — the analysis-ready fact (query this first)
 Grain: one row per **ever-active customer per calendar month**, from the
@@ -82,8 +93,11 @@ the daily grain cheap; cohort retention uses full history separately.
 
 ```
 dim_customer (customer_id)  ─┬─<  fct_customer_per_month_snapshot.customer_id
-                             └─<  dim_subscription.customer_id
-dim_subscription (subscription_id)  ─<  stg_voy__activity.subscription_id  (spell grain)
+                             ├─<  dim_subscription.customer_id
+                             ├─<  int_customer_continuous_subscriptions.customer_id  (period grain)
+                             └─<  stg_voy__activity.customer_id                      (spell grain)
+dim_subscription (subscription_id)  ─┬─<  int_subscription_active_periods.subscription_id  (period grain)
+                                     └─<  stg_voy__activity.subscription_id                (spell grain)
 ```
 
 - Customer attributes: join anything to `dim_customer` on `customer_id`.
@@ -145,7 +159,12 @@ activation month. Tenure = months since acquisition (M0 = joining month).
 - **Dates are inclusive** (`from_date`/`to_date` cover the customer on those days).
 - **Gap tolerance** for merging spells into a continuous period is
   `island_gap_tolerance_days` (0) — any gap ≥ 1 day starts a new period (a
-  churn/reactivation boundary).
+  churn/reactivation boundary). Note this also splits **back-to-back** spells
+  (one starting the day after the previous ends) into two periods even though no
+  day is uncovered — 113,026 subscriptions look like that. So read `gap_days`,
+  not `active_period_count`, to tell whether a subscription actually lapsed.
+- **`lifespan_days` is a span, not time-subscribed.** It counts lapsed days
+  between spells; `active_days` is the real coverage.
 
 ---
 
@@ -160,6 +179,10 @@ activation month. Tenure = months since acquisition (M0 = joining month).
 - *"How many subscriptions is each customer holding on average?"* →
   `dim_subscription` grouped by `customer_id` (count), or the informational
   `active_subscription_count` on the fact. Remember it does not affect "active".
+- *"How much of its life was a subscription actually live?"* →
+  `dim_subscription`, `active_days / lifespan_days`. For the lapses themselves use
+  `gap_days` / `longest_gap_days`, and for the runs use
+  `int_subscription_active_periods`.
 - *"Which acquisition group retains best at M12?"* → `viz_cohort_retention` at
   `tenure = 12`, aggregate `sum(retained_*)/sum(cohort_size)` by `acq_taxonomy`.
 - *"Daily active customers over the last 90 days"* → `viz_active_users_daily`,

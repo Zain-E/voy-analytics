@@ -40,8 +40,8 @@ periods** using a gaps-and-islands pass. This is the primitive every metric belo
   and survival metrics.
 
 ```sql
--- int_customer_continuous_subscriptions  (gap tolerance is a dbt var; default 0 days = spells must
--- overlap or touch to merge)
+-- int_customer_continuous_subscriptions  (gap tolerance is a dbt var; default 0 days = spells
+-- must overlap to merge; a spell starting the day after the previous ends opens a new period)
 with spells as (
   select customer_id, from_date, to_date
   from {{ ref('stg_voy__activity') }}

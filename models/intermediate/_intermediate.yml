@@ -25,3 +25,35 @@ models:
     tests:
       - dbt_utils.unique_combination_of_columns:
           combination_of_columns: [customer_id, period_index]
+
+  - name: int_subscription_active_periods
+    description: >
+      Subscription-grain companion to int_customer_continuous_subscriptions: each
+      subscription's spells merged into continuous active periods (gaps-and-islands),
+      one row per subscription × period. Exists because dim_subscription can only carry
+      min(start) → max(end), a span that covers the gaps between spells — anything asking
+      "was this subscription live on day D" needs these periods instead. Uses the same
+      island_gap_tolerance_days as the customer-grain merge.
+    columns:
+      - name: subscription_id
+        description: Subscription key.
+        tests: [not_null]
+      - name: customer_id
+        description: Owning customer (constant across the subscription's periods).
+        tests: [not_null]
+      - name: period_index
+        description: 1-based index of the active period within the subscription.
+        tests: [not_null]
+      - name: active_period_start
+        description: First day of the continuous active period (inclusive).
+        tests: [not_null]
+      - name: active_period_end
+        description: Last day of the continuous active period (inclusive).
+        tests: [not_null]
+      - name: spell_count
+        description: Number of raw activity spells merged into this period.
+      - name: is_first_active_period
+        description: True for the subscription's earliest active period.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [subscription_id, period_index]
