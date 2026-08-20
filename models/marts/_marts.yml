@@ -38,7 +38,10 @@ models:
       customer and may appear as several spells in the raw activity table, collapsed
       here to a single summarised row. Downstream subscription-grain models join this
       on subscription_id to resolve the owning customer's country / acquisition group.
-      (Spell-level interval maths still read stg_voy__activity directly.)
+      Built from int_subscription_active_periods, so it describes the gaps between
+      spells (active_days / gap_days / longest_gap_days) as well as the outer bounds.
+      Day-level interval maths still need the periods themselves — the start→end span
+      here covers the gaps.
     columns:
       - name: subscription_id
         description: Primary key — unique per subscription.
@@ -63,7 +66,28 @@ models:
         description: Latest spell end date across the subscription's spells (inclusive).
         tests: [not_null]
       - name: lifespan_days
-        description: Calendar span from first start to last end, inclusive (end − start + 1 days).
+        description: >
+          Calendar SPAN from first start to last end, inclusive (end − start + 1 days).
+          Not time-subscribed: it includes any days the subscription was lapsed between
+          spells. Use active_days for coverage.
+      - name: active_days
+        description: >
+          Days the subscription was actually live — the summed length of its merged active
+          periods. Always ≤ lifespan_days; equal when the subscription never lapsed.
+      - name: gap_days
+        description: >
+          Days inside the span when the subscription was NOT live (lifespan_days −
+          active_days). 0 for a subscription that never lapsed.
+      - name: longest_gap_days
+        description: >
+          Longest single lapse between two consecutive active periods, in days. 0 when the
+          subscription never lapsed (and 0 for back-to-back spells, which leave no uncovered day).
+      - name: active_period_count
+        description: >
+          Number of continuous active periods after merging the spells
+          (see int_subscription_active_periods). 1 = a single unbroken run. Note this counts
+          runs under island_gap_tolerance_days, so back-to-back spells count as two periods
+          with gap_days = 0 — read gap_days, not this, to tell whether a subscription lapsed.
       - name: spell_count
         description: Number of raw activity spells (intervals) that make up the subscription.
       - name: is_first_subscription

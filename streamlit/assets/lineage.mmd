@@ -1,0 +1,66 @@
+flowchart LR
+  subgraph SRC["Raw sources · voy (read-only)"]
+    direction TB
+    n_voy_acq_orders[("acq_orders<br/><i>One row per customer — acquisition busi…</i>")]
+    n_voy_activity[("activity<br/><i>Subscription active-interval 'spells'</i>")]
+    n_voy_customers[("customers<br/><i>One row per registered customer</i>")]
+  end
+  subgraph STAGING["Staging · views"]
+    direction TB
+    n_stg_voy__acq_orders["stg_voy__acq_orders<br/><i>1 row · customer_id</i>"]
+    n_stg_voy__activity["stg_voy__activity<br/><i>Cleaned subscription active-interval spells…</i>"]
+    n_stg_voy__customers["stg_voy__customers<br/><i>1 row · customer_id</i>"]
+  end
+  subgraph INTERMEDIATE["Intermediate · views"]
+    direction TB
+    n_int_customer_continuous_subscriptions["int_customer_continuous_subscriptions<br/><i>1 row · customer_id × period_index</i>"]
+    n_int_subscription_active_periods["int_subscription_active_periods<br/><i>1 row · subscription_id × period_index</i>"]
+  end
+  subgraph MARTS["Marts · tables"]
+    direction TB
+    n_dim_customer["dim_customer<br/><i>1 row · customer_id</i>"]
+    n_dim_subscription["dim_subscription<br/><i>1 row · subscription_id</i>"]
+    n_fct_customer_per_month_snapshot["fct_customer_per_month_snapshot<br/><i>1 row · customer_id × calendar_month</i>"]
+    n_viz_active_users_daily["viz_active_users_daily<br/><i>1 row · day × country × acq_taxonomy</i>"]
+    n_viz_cohort_retention["viz_cohort_retention<br/><i>1 row · cohort_month × country × acq_taxonomy × tenure</i>"]
+  end
+  n_stg_voy__activity --> n_int_customer_continuous_subscriptions
+  n_stg_voy__activity --> n_int_subscription_active_periods
+  n_int_customer_continuous_subscriptions --> n_dim_customer
+  n_stg_voy__acq_orders --> n_dim_customer
+  n_stg_voy__customers --> n_dim_customer
+  n_dim_customer --> n_dim_subscription
+  n_int_subscription_active_periods --> n_dim_subscription
+  n_dim_customer --> n_fct_customer_per_month_snapshot
+  n_int_customer_continuous_subscriptions --> n_fct_customer_per_month_snapshot
+  n_stg_voy__activity --> n_fct_customer_per_month_snapshot
+  n_fct_customer_per_month_snapshot --> n_viz_cohort_retention
+  n_dim_customer --> n_viz_active_users_daily
+  n_dim_subscription --> n_viz_active_users_daily
+  n_int_customer_continuous_subscriptions --> n_viz_active_users_daily
+  n_int_subscription_active_periods --> n_viz_active_users_daily
+  n_voy_customers --> n_stg_voy__customers
+  n_voy_acq_orders --> n_stg_voy__acq_orders
+  n_voy_activity --> n_stg_voy__activity
+  classDef sources fill:#EFEDE4,stroke:#A8A79C,color:#09110A,rx:6,ry:6;
+  classDef staging fill:#E6EDDE,stroke:#7D9A54,color:#09110A,rx:6,ry:6;
+  classDef intermediate fill:#F7E3D1,stroke:#C4703E,color:#09110A,rx:6,ry:6;
+  classDef marts fill:#D7E3D5,stroke:#0F3D2E,color:#09110A,rx:6,ry:6;
+  classDef viz fill:#F1F4DC,stroke:#9BA84B,color:#09110A,rx:6,ry:6;
+  classDef core stroke-width:3px,font-weight:bold;
+  class n_voy_customers sources;
+  class n_voy_acq_orders sources;
+  class n_voy_activity sources;
+  class n_int_customer_continuous_subscriptions intermediate;
+  class n_int_subscription_active_periods intermediate;
+  class n_dim_customer marts;
+  class n_dim_subscription marts;
+  class n_fct_customer_per_month_snapshot marts;
+  class n_viz_cohort_retention viz;
+  class n_viz_active_users_daily viz;
+  class n_stg_voy__customers staging;
+  class n_stg_voy__acq_orders staging;
+  class n_stg_voy__activity staging;
+  class n_int_customer_continuous_subscriptions core;
+  class n_fct_customer_per_month_snapshot core;
+  linkStyle default stroke:#6B6B63,stroke-width:1.4px;

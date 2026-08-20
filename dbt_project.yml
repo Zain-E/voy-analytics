@@ -28,7 +28,9 @@ vars:
   active_window_days: 32
 
   # Gap (days) tolerated when merging a customer's subscription spells into one
-  # continuous subscription period. 0 = spells must overlap or touch to merge.
+  # continuous subscription period. 0 = spells must OVERLAP to merge: a spell starting
+  # the day after the previous one ends opens a new period, even though no day is
+  # uncovered. Set to 1 to merge back-to-back spells as well.
   island_gap_tolerance_days: 0
 
   # Daily active-user reporting is bounded to this start date to keep the daily

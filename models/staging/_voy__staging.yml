@@ -34,7 +34,12 @@ models:
         description: Foreign key to the customer that holds the subscription.
         tests: [not_null]
       - name: subscription_id
-        description: Subscription identifier; repeats across a subscription's spells and across customers.
+        description: >
+          Subscription identifier. Repeats across the subscription's spells, but belongs to
+          exactly one customer — it is globally unique, not unique only within a customer
+          (1,482,002 ids for 1,482,002 customer x subscription pairs). The subscription-grain
+          models rely on this: int_subscription_active_periods merges spells partitioned by
+          subscription_id alone, and dim_subscription keys on it.
         tests: [not_null]
       - name: from_date
         description: Spell start date (inclusive) — the subscription was live from this day.

@@ -1,10 +1,12 @@
 """
 Voy — Customer Retention Dashboard (Streamlit)
 
-Two tabs:
-  • Overview  — Voy overview KPIs, this-month scorecards (MoM deltas + sparklines),
-                active users, acquisition
-  • Retention — cohort retention heatmap (2022+), monthly churn
+Three tabs:
+  • Overview   — Voy overview KPIs, this-month scorecards (MoM deltas + sparklines),
+                 active users, acquisition
+  • Retention  — cohort retention heatmap (2022+), monthly churn
+  • Data model — architecture DAG, ERD and table summaries, generated from the dbt
+                 project itself (see data_model.py)
 
 Themed to Voy's brand (forest green / olive / peach on cream · Manrope, Poppins wordmark).
 Pure presentation layer over the dbt marts (see data.py).
@@ -18,6 +20,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 import data as d
+import data_model as dm
 
 # ----------------------------------------------------------------- Voy brand --
 GREEN        = "#0F3D2E"   # primary forest green (headings, values, primary series)
@@ -191,7 +194,7 @@ with st.sidebar:
 with st.spinner("Loading dashboard…"):
     d.prefetch(country, taxonomy)
 
-overview_tab, retention_tab = st.tabs(["Overview", "Retention"])
+overview_tab, retention_tab, model_tab = st.tabs(["Overview", "Retention", "Data model"])
 
 # ================================================================ OVERVIEW ====
 with overview_tab:
@@ -204,7 +207,7 @@ with overview_tab:
 - **Churned users** — users with a subscription last month, but **none** this month.
 - **Reactivated users** — users with a subscription this month after being inactive last month (a win-back).
 - **Activation rate** — of all registered users, the share that **ever** subscribed.
-- **Active users· 32-day** — users with a live subscription in the last 32 days.  32 days is a sign that the subscription lasts at least 2 months.
+- **Active users· 32-day** — users with a live subscription across the last 32 days.  32 days is a sign that the subscription lasts at least 2 months.
 - **Total subscriptions** — every subscription ever created.
             """
         )
@@ -220,7 +223,7 @@ with overview_tab:
     b3.metric("Activation rate", f"{k['activation_rate']:.1%}",
               help="Of all registered users, the share that ever subscribed (ever-active ÷ registered).")
     b4.metric("Active users · 32-day", f"{k['active_window']:,}",
-              help="Users with a live subscription in the last 32 days.  32 days is a sign that the subscription lasts at least 2 months.")
+              help="Users with a live subscription across the last 32 days.  32 days is a sign that the subscription lasts at least 2 months.")
 
     st.markdown("---")
 
@@ -314,9 +317,9 @@ with retention_tab:
 - **Cohort** — The calendar **month a customer first subscribed**. The Y-axis of the heatmap.
 - **Tenure** — months since acquisition. The X-axis. M0 is the initial month of subscribing.
 - **Never-churned retention** — share of a cohort still in their **first unbroken
-  subscription** at tenure *n* (never churned since joining). Only ever goes down.
+  subscription** at tenure *n* (never churned since joining).
 - **Total retention** — share of a cohort **active** at tenure *n*, **including
-  win-backs** (never-churned + reactivated). Always ≥ never-churned; the gap is reactivation.
+  win-backs** (never-churned + reactivated). Always ≥ never-churned; the gap is reactivation.  This means that a user can churn and then reactivate within the 12 month period and it will still be included.
 - **Month-over-month (MoM) logo churn** — of the customers active in month *M-1*, the share who
   are **not** active in month *M*. "Logo" = customer count (not revenue). `retention = 1 − churn`.
             """
@@ -338,8 +341,9 @@ with retention_tab:
         z = pivot.values * 100
 
         _lab = "Never-churned" if metric == "never_churned" else "Total"
-        st.markdown(f"**{_lab} retention** — read a row left→right to see how that joining cohort "
-                    f"decays over its first 12 months. Darker = higher retention.  Total retention includes reactivated users, which can happen at any point within the 12 month Tenure.")
+        st.markdown(f"**{_lab} retention** — read from left→right. Darker = higher retention. "
+                    f"Cohort based retention.\n\n"
+                    f"Please note, total retention includes reactivated users, which can happen at any point within the 12 month Tenure.")
 
         fig = go.Figure(go.Heatmap(
             z=z, x=tenures, y=cohorts,
@@ -448,3 +452,62 @@ with retention_tab:
                          tickmode="array", tickvals=list(range(0, maxT + 1)),
                          ticktext=[f"M{t}" for t in range(0, maxT + 1)])
         st.plotly_chart(fig, use_container_width=True)
+
+
+# =============================================================== DATA MODEL ====
+with model_tab:
+    st.header("Data model")
+    st.caption(
+        "Generated from the dbt project itself — lineage from the `ref()` / `source()` graph, "
+        "For column-level docs and test results, run `./run_docs.sh`."
+    )
+
+    _s = dm.stats()
+    d1, d2, d3, d4 = st.columns(4)
+    d1.metric("Raw sources", _s["sources"], help="Tables in `zains-gcp.voy` — read-only inputs.")
+    d2.metric("dbt models", _s["models"], help="Staging + intermediate + marts, all version-controlled SQL.")
+    d3.metric("Marts", len(_s["layers"]["marts"]),
+              help="The governed tables the dashboard reads — it never queries the raw sources.")
+    d4.metric("Tests", _s["tests"],
+              help="Declared dbt tests across every model — uniqueness, not-null, ranges, relationships.")
+
+    st.markdown("---")
+
+    st.subheader(
+        "Architecture",
+        help="The dbt DAG: how raw sources flow through staging and the gaps-and-islands merge "
+             "into the marts the dashboard reads. Scroll to zoom, drag to pan.",
+    )
+    st.markdown(
+        "**Raw sources → staging → intermediate → marts.** Each arrow is a `ref()` in the SQL, so this is the real build order."
+        "`int_customer_continuous_subscriptions` merges each customer's subscription spells into continuous periods."
+        "  You can consider `fct_customer_per_month_snapshot` the main table for the dashboard. "
+        "The olive `viz_*` models are rollups feeding this dashboard."
+    )
+    dm.render_diagram("lineage", height=480)
+    with st.expander("Mermaid source"):
+        st.code(dm.diagram_source("lineage"), language="text")
+
+    st.markdown("---")
+
+    st.subheader(
+        "Entity relationship diagram",
+        help="Keys and cardinality across the marts. Solid lines are foreign keys; dashed lines "
+             "are aggregate rollups, not key relationships. Scroll to zoom, drag to pan.",
+    )
+    st.markdown(
+        "**Star schema**, with the hub in the middle: `dim_customer` is one row per registered "
+        "user, and everything around it joins back on `customer_id`. Crow's feet mark the many "
+        "side — a customer holds many subscriptions, a subscription has many activity spells and "
+        "many continuous active periods, a customer has one row per month in the fact. "
+        "The two gaps-and-islands merges flank the hub, and the daily model reads both: "
+        "`int_customer_continuous_subscriptions` (customer grain) is what its active-customer "
+        "measures count, while `int_subscription_active_periods` (subscription grain) feeds "
+        "`dim_subscription`'s `active_days` / `gap_days` and the informational "
+        "`live_subscriptions` count. Both exist because a start→end span silently covers the "
+        "lapses between spells. "
+        "**Dashed** links are aggregations (`viz_*` "
+        "rollups), not foreign keys: they have no key relationship to the dimensions, only a grain "
+        "of their own."
+    )
+    dm.render_diagram("erd", height=780)
