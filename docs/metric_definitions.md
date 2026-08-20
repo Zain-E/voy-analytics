@@ -26,21 +26,21 @@ churned).
 
 ---
 
-## 2. Foundational concept — customer active periods
+## 2. Foundational concept — customer continuous subscription periods
 
 A customer holds many subscriptions, whose active spells overlap and repeat. To measure the
-customer (not the subscription), we **merge all of a customer's spells into continuous active
+customer (not the subscription), we **merge all of a customer's spells into continuous subscription
 periods** using a gaps-and-islands pass. This is the primitive every metric below is built on.
 
 - **Input:** `activity` rows, each a `[from_date, to_date]` spell for one `subscription_id`.
-- **Output grain:** one row per **customer × continuous active period** —
-  `customer_id, period_start, period_end, period_index, is_first_period`.
+- **Output grain:** one row per **customer × continuous subscription period** —
+  `customer_id, subscription_period_start, subscription_period_end, period_index, is_first_subscription_period`.
 - **Why:** (a) makes activity subscription-count-independent, exactly as the brief requires;
   (b) the **gaps between periods are churn-and-reactivation events**, which powers reactivation
   and survival metrics.
 
 ```sql
--- int_customer_active_periods  (gap tolerance is a dbt var; default 0 days = spells must
+-- int_customer_continuous_subscriptions  (gap tolerance is a dbt var; default 0 days = spells must
 -- overlap or touch to merge)
 with spells as (
   select customer_id, from_date, to_date
@@ -72,9 +72,9 @@ grouped as (
 select
   customer_id,
   period_index,
-  min(from_date) as period_start,
-  max(to_date)   as period_end,
-  period_index = 1 as is_first_period
+  min(from_date) as subscription_period_start,
+  max(to_date)   as subscription_period_end,
+  period_index = 1 as is_first_subscription_period
 from grouped
 group by customer_id, period_index
 ```
@@ -134,10 +134,10 @@ where a.from_date <= D
 | Metric | Definition | SQL condition (spell overlaps window) |
 |---|---|---|
 | **Live / currently subscribed** | Subscription covers `D` | `from_date <= D and to_date >= D` |
-| **DAU** (active on day `D`) | Active period covers `D` | `period_start <= D and period_end >= D` |
-| **WAU** | Active period overlaps the calendar week of `D` | overlap week |
-| **MAU** | Active period overlaps the calendar month of `D` | `period_start <= month_end and period_end >= month_start` |
-| **Rolling 30 / 90-day active** | Active period overlaps `[D-29, D]` / `[D-89, D]` | `from_date <= D and to_date >= D-k` |
+| **DAU** (active on day `D`) | Continuous subscription period covers `D` | `subscription_period_start <= D and subscription_period_end >= D` |
+| **WAU** | Continuous subscription period overlaps the calendar week of `D` | overlap week |
+| **MAU** | Continuous subscription period overlaps the calendar month of `D` | `subscription_period_start <= month_end and subscription_period_end >= month_start` |
+| **Rolling 30 / 90-day active** | Continuous subscription period overlaps `[D-29, D]` / `[D-89, D]` | `from_date <= D and to_date >= D-k` |
 
 ### 3.4 Reference values (as of 2024-08-16)
 
@@ -158,17 +158,17 @@ MAU trend for context: 120,492 (Jul-2023) → 191,784 (Jul-2024); Aug-2024 is pa
 ### 4.1 Cohort definition
 
 A customer's **cohort** is the calendar month of their **first-ever activation**:
-`cohort_month = date_trunc(min(period_start), month)`.
-**Tenure** `n = date_diff(month, cohort_month, month)` = months since acquisition.
+`cohort_month = date_trunc(min(subscription_period_start), month)`.
+**Tenure** `n = date_diff(calendar_month, cohort_month, month)` = months since acquisition.
 
-### 4.2 Survival retention `Rₙ` — **primary**
+### 4.2 Never-churned retention (`never_churned_retention`) — **primary**
 
 Share of a cohort that has **not yet churned** by tenure `n` — i.e. their **first continuous
-active period still reaches** month `cohort_month + n`. This is the classic "never left" curve; it
+subscription period still reaches** month `cohort_month + n`. This is the classic "never left" curve; it
 is **monotonically non-increasing**.
 
 ```
-survival_Rₙ = customers whose first active period reaches month (cohort_month + n)
+survival_Rₙ = customers whose first continuous subscription period reaches month (cohort_month + n)
               ─────────────────────────────────────────────────────────────────────
                                        cohort_size
 ```
@@ -176,9 +176,9 @@ survival_Rₙ = customers whose first active period reaches month (cohort_month 
 ```sql
 with first_period as (          -- end of each customer's first continuous period = their first churn point
   select customer_id,
-         date_trunc(min(period_start), month) as cohort_month,
-         max(if(is_first_period, period_end, null)) as first_period_end
-  from {{ ref('int_customer_active_periods') }}
+         date_trunc(min(subscription_period_start), month) as cohort_month,
+         max(if(is_first_subscription_period, subscription_period_end, null)) as first_period_end
+  from {{ ref('int_customer_continuous_subscriptions') }}
   group by customer_id
 ),
 months_survived as (
@@ -188,16 +188,16 @@ months_survived as (
 )
 select cohort_month, n as tenure,
        count(*)                              as cohort_size,
-       countif(n_survived >= n)              as retained_survival,
-       safe_divide(countif(n_survived >= n), count(*)) as survival_retention
+       countif(n_survived >= n)              as retained_never_churned,
+       safe_divide(countif(n_survived >= n), count(*)) as never_churned_retention
 from months_survived, unnest(generate_array(0, 60)) as n
 group by cohort_month, tenure
 ```
 
-### 4.3 Activity-based retention `Rₙ` — **secondary (reactivation overlay)**
+### 4.3 Total retention (`total_retention`) — **secondary (reactivation overlay)**
 
-Share of a cohort **active in** month `cohort_month + n`, **win-backs included** (any active
-period overlaps that month, even after a gap). Always **≥ survival**; can rise again after a dip.
+Share of a cohort **active in** month `cohort_month + n`, **win-backs included** (any continuous
+subscription period overlaps that month, even after a gap). Always **≥ survival**; can rise again after a dip.
 
 ```
 activity_Rₙ = customers of the cohort active in month (cohort_month + n)
@@ -205,7 +205,7 @@ activity_Rₙ = customers of the cohort active in month (cohort_month + n)
                                     cohort_size
 ```
 
-Computed directly from `fct_customer_month` (`is_active` flag) grouped by `cohort_month, tenure`.
+Computed directly from `fct_customer_per_month_snapshot` (`has_active_subscription` flag) grouped by `cohort_month, tenure`.
 
 ### 4.4 Reading the two together
 
@@ -237,11 +237,11 @@ monthly_churn(M) = customers active in M-1 AND NOT active in M
 ```
 
 ```sql
-with mau as (   -- distinct active customers per month, from fct_customer_month
-  select month, customer_id from {{ ref('fct_customer_month') }} where is_active
+with mau as (   -- distinct active customers per calendar month, from fct_customer_per_month_snapshot
+  select calendar_month, customer_id from {{ ref('fct_customer_per_month_snapshot') }} where has_active_subscription
 )
 select
-  m.month,
+  m.calendar_month,
   count(distinct p.customer_id)                                            as active_prev,
   count(distinct p.customer_id) - count(distinct m.customer_id)            as churned,
   safe_divide(count(distinct p.customer_id) - count(distinct m.customer_id),
@@ -249,8 +249,8 @@ select
 from mau p
 left join mau m
   on m.customer_id = p.customer_id
- and m.month = date_add(p.month, interval 1 month)
-group by m.month
+ and m.calendar_month = date_add(p.calendar_month, interval 1 month)
+group by m.calendar_month
 ```
 
 ### 5.2 Retention rate (period-over-period)
@@ -260,7 +260,7 @@ group by m.month
 
 ### 5.3 Survival churn (first-churn event)
 
-The first churn is the **end of a customer's first active period** (`first_period_end`). The
+The first churn is the **end of a customer's first continuous subscription period** (`first_period_end`). The
 survival curve in §4.2 is `1 − cumulative survival churn`. Useful for "median customer lifetime"
 (tenure at which survival crosses 50%).
 
@@ -305,11 +305,11 @@ between activity-based and survival retention, and feed a "win-back" tile.
 **dbt models**
 
 - `stg_voy__customers`, `stg_voy__acq_orders`, `stg_voy__activity` — cleaned staging.
-- `int_customer_active_periods` — the gaps-and-islands primitive (§2).
+- `int_customer_continuous_subscriptions` — the gaps-and-islands primitive (§2).
 - `dim_customer` — customer + country + taxonomy + cohort_month.
-- `fct_customer_month` — **analysis-ready** customer × month fact (is_active, survival flag,
+- `fct_customer_per_month_snapshot` — **analysis-ready** customer × month fact (has_active_subscription, has_continuous_active_subscription,
   tenure, new/reactivated/churned, dims). The table everything else reads.
-- `rpt_cohort_retention`, `rpt_active_users_daily` — thin reporting marts feeding the dashboard.
+- `viz_cohort_retention`, `viz_active_users_daily` — thin reporting marts feeding the dashboard.
 
 **Streamlit dashboard** reads the marts from BigQuery and renders: cohort retention heatmap
 (survival) with activity-based overlay, survival curves by country/taxonomy, DAU/MAU trend with
@@ -317,7 +317,7 @@ the 32-day active line, monthly churn, and acquisition intake — all filterable
 taxonomy, with the partial month excluded.
 
 **AI interaction.** With LookML off, the governed contract is the **dbt layer itself**: one tall,
-**described and tested** fact (`fct_customer_month`), the metric SQL in this document, and dbt docs.
+**described and tested** fact (`fct_customer_per_month_snapshot`), the metric SQL in this document, and dbt docs.
 That single consistent grain + documented definitions is what lets an LLM/agent answer questions
 like *"hair-loss survival retention in Brazil for the 2023-Q1 cohort"* against one definition
 rather than re-deriving ad-hoc SQL.

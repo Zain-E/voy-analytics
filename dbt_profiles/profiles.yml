@@ -1,0 +1,32 @@
+# dbt connection profile for this project.
+# Location: this repo's dbt_profiles/ folder. run_dbt.sh points dbt here via
+# `--profiles-dir dbt_profiles`; CI sets DBT_PROFILES_DIR to it.
+#
+# No secrets are hard-coded — project/keyfile come from env vars (with sensible
+# defaults), so this file is safe to commit. Local dev needs nothing set.
+
+voy_retention:
+  target: dev
+  outputs:
+
+    # ---- Local development: authenticate as yourself ----
+    #   gcloud auth application-default login
+    dev:
+      type: bigquery
+      method: oauth
+      project: "{{ env_var('GCP_PROJECT', 'zains-gcp') }}"
+      dataset: voy_analytics        # dbt WRITES here — separate from raw `voy`
+      location: US
+      threads: 4
+      priority: interactive
+
+    # ---- CI: service account (keyfile path supplied via env var) ----
+    ci:
+      type: bigquery
+      method: service-account
+      project: "{{ env_var('GCP_PROJECT', 'zains-gcp') }}"
+      dataset: voy_analytics_ci
+      location: US
+      threads: 4
+      priority: interactive
+      keyfile: "{{ env_var('BIGQUERY_KEYFILE', '') }}"

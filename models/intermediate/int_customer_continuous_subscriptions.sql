@@ -1,17 +1,25 @@
 -- ============================================================================
--- int_customer_active_periods
+-- int_customer_continuous_subscriptions
 -- ----------------------------------------------------------------------------
 -- THE core modelling concept. Collapse every one of a customer's subscription
--- spells into CONTINUOUS active periods ("islands"), ignoring subscription_id.
+-- spells into CONTINUOUS subscription periods ("islands"), ignoring subscription_id.
 -- This makes activity subscription-count-independent (per the brief) and turns
 -- the GAPS between periods into churn/reactivation signals.
 --
--- Output grain: one row per customer per continuous active period.
+-- Output grain: one row per customer per continuous subscription period.
 -- ============================================================================
 
+-- De-dupe to distinct (customer, subscription, interval) rows, and carry
+-- subscription_id so it can serve as a deterministic TIEBREAKER in the window
+-- ORDER BY below. Multiple subscriptions can share the same [from_date, to_date];
+-- those rows tie on (from_date, to_date), and BigQuery may break the tie
+-- inconsistently across the two window functions, corrupting the island
+-- assignment (overlapping periods). Ordering by subscription_id makes the sort a
+-- total order — hence deterministic, non-overlapping continuous periods.
 with spells as (
-    select
+    select distinct
         customer_id,
+        subscription_id,
         from_date,
         to_date
     from {{ ref('stg_voy__activity') }}
@@ -21,11 +29,12 @@ with spells as (
 ordered as (
     select
         customer_id,
+        subscription_id,
         from_date,
         to_date,
         max(to_date) over (
             partition by customer_id
-            order by from_date, to_date
+            order by from_date, to_date, subscription_id
             rows between unbounded preceding and 1 preceding
         ) as prev_max_to
     from spells
@@ -49,7 +58,7 @@ grouped as (
         *,
         sum(is_new_period) over (
             partition by customer_id
-            order by from_date, to_date
+            order by from_date, to_date, subscription_id
             rows between unbounded preceding and current row
         ) as period_index
     from flagged
@@ -58,8 +67,8 @@ grouped as (
 select
     customer_id,
     period_index,
-    min(from_date)          as period_start,
-    max(to_date)            as period_end,
-    period_index = 1        as is_first_period
+    min(from_date)          as subscription_period_start,
+    max(to_date)            as subscription_period_end,
+    period_index = 1        as is_first_subscription_period
 from grouped
 group by customer_id, period_index

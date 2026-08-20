@@ -5,7 +5,7 @@ select
     country,
     acq_taxonomy,
     tenure,
-    retained_survival,
-    retained_activity
-from {{ ref('rpt_cohort_retention') }}
-where retained_activity < retained_survival
+    retained_never_churned,
+    retained_total
+from {{ ref('viz_cohort_retention') }}
+where retained_total < retained_never_churned

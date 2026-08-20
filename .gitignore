@@ -6,8 +6,18 @@ logs/
 
 # python / streamlit
 .venv/
+.venv-dbt/
+streamlit/.venv/
 __pycache__/
 *.pyc
+
+# dashboard query cache (parquet snapshots — regenerated on first run)
+.voy_cache/
+**/.voy_cache/
+
+# streamlit secrets — never commit (match at any depth)
+secrets.toml
+**/secrets.toml
 .streamlit/secrets.toml
 
 # creds — never commit
@@ -16,8 +26,8 @@ __pycache__/
 .env
 *.local
 
+# local scratch — backup zips, stale lock files
+_to_delete/
+
 # os
 .DS_Store
-
-# transfer leftovers
-_to_delete/

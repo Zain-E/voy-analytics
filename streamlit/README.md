@@ -1,7 +1,7 @@
 # Streamlit dashboard
 
 Presentation layer over the dbt marts. No business logic lives here — every
-number comes from `rpt_*` / `fct_*` / `dim_*`.
+number comes from `viz_*` / `fct_*` / `dim_*`.
 
 ## Run
 

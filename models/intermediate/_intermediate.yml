@@ -1,10 +1,10 @@
 version: 2
 
 models:
-  - name: int_customer_active_periods
+  - name: int_customer_continuous_subscriptions
     description: >
       Core model. Each customer's subscription spells merged into continuous
-      active periods (gaps-and-islands). One row per customer × continuous period.
+      subscription periods (gaps-and-islands). One row per customer × continuous period.
       Gaps between periods are churn/reactivation events. Validated: reproduces
       raw MAU exactly and contains no overlapping periods per customer.
     columns:
@@ -14,13 +14,13 @@ models:
       - name: period_index
         description: 1-based index of the continuous period within the customer.
         tests: [not_null]
-      - name: period_start
-        description: First day of the continuous active period (inclusive).
+      - name: subscription_period_start
+        description: First day of the continuous subscription period (inclusive).
         tests: [not_null]
-      - name: period_end
-        description: Last day of the continuous active period (inclusive).
+      - name: subscription_period_end
+        description: Last day of the continuous subscription period (inclusive).
         tests: [not_null]
-      - name: is_first_period
+      - name: is_first_subscription_period
         description: True for the customer's first continuous period (drives survival).
     tests:
       - dbt_utils.unique_combination_of_columns:

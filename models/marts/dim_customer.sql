@@ -12,19 +12,19 @@ acq as (
 ),
 
 periods as (
-    select * from {{ ref('int_customer_active_periods') }}
+    select * from {{ ref('int_customer_continuous_subscriptions') }}
 ),
 
--- Customer-level activity summary derived from the merged active periods.
+-- Customer-level activity summary derived from the merged continuous subscription periods.
 activity_summary as (
     select
         customer_id,
-        min(period_start)                                   as first_activation_date,
-        max(period_end)                                     as last_active_date,
-        date_trunc(min(period_start), month)                as cohort_month,
+        min(subscription_period_start)                                   as first_activation_date,
+        max(subscription_period_end)                                     as last_active_date,
+        date_trunc(min(subscription_period_start), month)                as cohort_month,
         -- End of the FIRST continuous period = the customer's first churn point.
         -- Drives survival retention.
-        max(if(is_first_period, period_end, null))          as first_period_end
+        max(if(is_first_subscription_period, subscription_period_end, null))          as first_period_end
     from periods
     group by customer_id
 )

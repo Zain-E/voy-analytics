@@ -1,0 +1,44 @@
+name: dbt daily build
+
+# Runs the models + tests once a day, and on demand, using the `ci` target in
+# dbt_profiles/profiles.yml.
+#
+# Required repo secrets (Settings → Secrets and variables → Actions):
+#   GCP_SA_KEY   – JSON key for a service account with, on BigQuery:
+#                    • roles/bigquery.dataViewer  on the `voy` source dataset
+#                    • roles/bigquery.dataEditor  on the CI target dataset (voy_analytics_ci)
+#                    • roles/bigquery.jobUser     on the project
+#   GCP_PROJECT  – billing/execution project id (e.g. zains-gcp)
+
+on:
+  schedule:
+    - cron: '0 6 * * *'      # 06:00 UTC daily
+  workflow_dispatch: {}       # manual trigger button
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      DBT_PROFILES_DIR: ${{ github.workspace }}/dbt_profiles
+      GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
+      BIGQUERY_KEYFILE: ${{ runner.temp }}/gcp-keyfile.json
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dbt
+        run: pip install "dbt-bigquery>=1.7,<2.0"
+
+      - name: Write BigQuery credentials
+        run: printf '%s' "$GCP_SA_KEY" > "$BIGQUERY_KEYFILE"
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+
+      - name: dbt deps
+        run: dbt deps --target ci
+
+      - name: dbt build
+        run: dbt build --target ci

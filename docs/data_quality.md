@@ -8,7 +8,7 @@ in the models. Snapshot / as-of date: **2024-08-16** (max date in `activity`).
 | Finding | Count | Handling |
 |---|---:|---|
 | Registered customers | 532,848 | `dim_customer` (all) |
-| Ever-active customers | 512,366 | retention universe (`fct_customer_month`) |
+| Ever-active customers | 512,366 | retention universe (`fct_customer_per_month_snapshot`) |
 | Registered but **never active** | 20,482 | excluded from retention; surfaced as **activation rate** (96.2%) |
 | Ever-active customers with **no acquisition taxonomy** | 4,896 | bucketed as `'Unknown'` |
 | Malformed spells (`to_date < from_date`) | 0 | filtered in `stg_voy__activity` defensively |
@@ -42,5 +42,5 @@ in the models. Snapshot / as-of date: **2024-08-16** (max date in `activity`).
 ## Validation performed (read-only, against raw)
 
 - Island merge reproduces raw MAU **exactly** (Jul-2023 = 120,492; Jul-2024 = 191,784).
-- **Zero** overlapping active periods per customer.
+- **Zero** overlapping continuous subscription periods per customer.
 - 2023-01 cohort survival decays monotonically and activity ≥ survival at every tenure.
